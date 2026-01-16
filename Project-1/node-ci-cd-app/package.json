@@ -1,0 +1,16 @@
+{
+  "name": "node-ci-cd-app",
+  "version": "1.0.0",
+  "description": "Node.js app for Docker + Jenkins CI/CD practice",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.3"
+  }
+}
