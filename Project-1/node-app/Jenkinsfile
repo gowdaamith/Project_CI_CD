@@ -1,0 +1,136 @@
+pipeline {
+    agent none
+
+    parameters {
+        choice(
+            name: 'ENV',
+            choices: ['dev','qa','prod'],
+            description: 'Choose environment'
+        )
+        booleanParam(
+            name: 'RUN_SECURITY_CHECKS',
+            defaultValue: true,
+            description: 'Whether to run security checks'
+        )
+    }
+
+    environment {
+        APP_NAME   = "node-app"
+        IMAGE_NAME = "gowdaamith/node-app"
+        IMAGE_TAG  = "${env.BUILD_NUMBER}"
+    }
+
+    options {
+        timestamps()
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+        timeout(time: 30, unit: 'MINUTES')
+        disableConcurrentBuilds()
+    }
+
+    stages {
+
+        stage('Checkout') {
+            agent any
+            steps {
+                checkout scm
+                stash name: 'source', includes: '**/*'
+            }
+        }
+
+        stage('Install & Test') {
+            agent any
+            steps {
+                unstash 'source'
+                sh '''
+                    npm ci
+                    npm test
+                '''
+                stash name: 'deps', includes: 'node_modules/**'
+            }
+        }
+
+        stage('Parallel Checks') {
+            parallel {
+
+                stage('Lint') {
+                    agent any
+                    steps {
+                        unstash 'source'
+                        unstash 'deps'
+                        sh 'npm run lint'
+                    }
+                }
+
+                stage('Security Scan') {
+                    when {
+                        expression { params.RUN_SECURITY_CHECKS }
+                    }
+                    agent {
+                        docker { image 'aquasec/trivy:latest' }
+                    }
+                    steps {
+                        unstash 'source'
+                        catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+                            sh 'trivy fs .'
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Build Docker Image') {
+            agent any
+            steps {
+                unstash 'source'
+                script {
+                    docker.build("${IMAGE_NAME}:${IMAGE_TAG}")
+                }
+            }
+        }
+
+        stage('Push Image') {
+            agent any
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'dockerhub-creds',
+                        usernameVariable: 'DOCKER_USER',
+                        passwordVariable: 'DOCKER_PASS'
+                    )
+                ]) {
+                    sh '''
+                        echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                        docker push ${IMAGE_NAME}:${IMAGE_TAG}
+                    '''
+                }
+            }
+        }
+
+        stage('Deploy') {
+            when {
+                anyOf {
+                    expression { params.ENV == 'qa' }
+                    expression { params.ENV == 'prod' }
+                }
+            }
+            input {
+                message "Deploy to ${params.ENV}?"
+                ok "Deploy"
+            }
+            agent any
+            steps {
+                sh '''
+                    docker stop node-app || true
+                    docker rm node-app || true
+                    docker run -d -p 3000:3000 --name node-app ${IMAGE_NAME}:${IMAGE_TAG}
+                '''
+            }
+        }
+    }
+
+    post {
+        always {
+            echo "Pipeline finished"
+        }
+    }
+}
