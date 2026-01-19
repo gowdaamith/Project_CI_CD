@@ -44,7 +44,10 @@ pipeline {
         /* ---------------- Install & Test ---------------- */
         stage('Install & Test') {
             agent {
-                docker { image 'node:18-slim' }
+                docker { image 'node:18-slim'
+                         args '-u node'       
+                       
+                }
             }
             steps {
                 dir(APP_DIR) {
