@@ -18,7 +18,7 @@ pipeline {
         APP_NAME   = 'node-app'
         IMAGE_NAME = 'gowdaamith/node-app'
         IMAGE_TAG  = "${env.BUILD_NUMBER}"
-        APP_DIR = 'project1/node-app'
+        APP_DIR = 'project-1/node-app'
     }
 
     options {
