@@ -50,7 +50,7 @@ pipeline {
                 dir(APP_DIR) {
                     unstash 'source'
                     sh '''
-                        npm ci
+                        npm install
                         npm test
                     '''
                     stash name: 'deps', includes: 'node_modules/**'
